@@ -3,6 +3,7 @@ Recruiter AI Agent - Mode A (X-Ray Sourcing & Vietnam Talent Mapping)
 Automates Google X-Ray search company-by-company in Vietnam without touching LinkedIn login.
 """
 
+import io
 import os
 import re
 import time
@@ -599,16 +600,11 @@ def execute_xray_sourcing(
         
     return all_candidates, company_status
 
-def export_mapping_recap_to_excel(
-    candidates: List[Dict[str, str]], 
-    company_status: List[Dict[str, Any]], 
-    file_path: str = "Recruiter_Vietnam_Sourcing_Recap.xlsx"
-) -> str:
-    """
-    Exports a 2-sheet formatted Excel report:
-    Sheet 1: Sourced Candidates
-    Sheet 2: Search Coverage Recap
-    """
+def _build_recap_workbook(
+    candidates: List[Dict[str, str]],
+    company_status: List[Dict[str, Any]],
+) -> openpyxl.Workbook:
+    """Builds the styled 2-sheet openpyxl Workbook in memory."""
     wb = openpyxl.Workbook()
     
     # Styles
@@ -703,6 +699,28 @@ def export_mapping_recap_to_excel(
     widths2 = {1: 25, 2: 15, 3: 20, 4: 65}
     for col_idx, width in widths2.items():
         ws2.column_dimensions[get_column_letter(col_idx)].width = width
-        
+
+    return wb
+
+
+def export_mapping_recap_to_bytes(
+    candidates: List[Dict[str, str]],
+    company_status: List[Dict[str, Any]],
+) -> bytes:
+    """Multi-user-safe in-memory Excel export (zero shared disk writes)."""
+    wb = _build_recap_workbook(candidates, company_status)
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return buf.getvalue()
+
+
+def export_mapping_recap_to_excel(
+    candidates: List[Dict[str, str]],
+    company_status: List[Dict[str, Any]],
+    file_path: str = "Recruiter_Vietnam_Sourcing_Recap.xlsx",
+) -> str:
+    """Exports the 2-sheet Excel report to a local file path."""
+    wb = _build_recap_workbook(candidates, company_status)
     wb.save(file_path)
     return file_path

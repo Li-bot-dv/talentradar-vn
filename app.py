@@ -7,20 +7,19 @@ import os
 import streamlit as st
 import pandas as pd
 from dotenv import load_dotenv, set_key
-from recruiter_engine import build_xray_queries, execute_xray_sourcing, export_mapping_recap_to_excel
+from recruiter_engine import build_xray_queries, execute_xray_sourcing, export_mapping_recap_to_bytes
 
+# Streamlit Community Cloud runs Linux; local Windows desktop runs 'nt'
+IS_CLOUD = os.name != "nt" or bool(os.getenv("STREAMLIT_SHARING_MODE"))
 ENV_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
-load_dotenv(ENV_PATH)
+if not IS_CLOUD:
+    load_dotenv(ENV_PATH)
 
-def _get_secret(key_name: str) -> str:
-    """Reads API key from local .env / env vars or Streamlit Cloud Secrets."""
-    val = os.getenv(key_name, "")
-    if val:
-        return val
-    try:
-        return str(st.secrets.get(key_name, ""))
-    except Exception:
+def _get_local_key(key_name: str) -> str:
+    """Reads API key from local .env ONLY when running locally (never shared on Cloud BYOK)."""
+    if IS_CLOUD:
         return ""
+    return os.getenv(key_name, "")
 
 st.set_page_config(
     page_title="TalentRadar VN · AI Sourcing Agent",
@@ -289,34 +288,43 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# State
+# State (strictly isolated per browser session)
 if "candidates" not in st.session_state:
     st.session_state.candidates = []
 if "company_status" not in st.session_state:
     st.session_state.company_status = []
-if "excel_file" not in st.session_state:
-    st.session_state.excel_file = None
+if "excel_bytes" not in st.session_state:
+    st.session_state.excel_bytes = None
 
 # =====================================================
 # SIDEBAR CONTROLS
 # =====================================================
 with st.sidebar:
     st.markdown("### ⚡ Search Engine")
-    saved_serper = _get_secret("SERPER_API_KEY")
-    saved_google_key = _get_secret("GOOGLE_CSE_API_KEY")
-    saved_google_cx = _get_secret("GOOGLE_CSE_CX")
-    default_engine_idx = 1 if saved_serper else (2 if (saved_google_key and saved_google_cx) else 0)
+    saved_serper = _get_local_key("SERPER_API_KEY")
+    saved_google_key = _get_local_key("GOOGLE_CSE_API_KEY")
+    saved_google_cx = _get_local_key("GOOGLE_CSE_CX")
 
-    engine_choice = st.selectbox(
-        "Engine Mode",
-        [
+    if IS_CLOUD:
+        engine_options = [
+            "Serper.dev API (Fast · 2,500 Free)",
+            "Google Custom Search API (100/Day)",
+        ]
+        default_engine_idx = 0
+    else:
+        engine_options = [
             "Browser Mode (Free · Playwright)",
             "Serper.dev API (Fast · 2,500 Free)",
             "Google Custom Search API (100/Day)",
-        ],
+        ]
+        default_engine_idx = 1 if saved_serper else (2 if (saved_google_key and saved_google_cx) else 0)
+
+    engine_choice = st.selectbox(
+        "Engine Mode",
+        engine_options,
         index=default_engine_idx,
         label_visibility="collapsed",
-        help="Browser Mode is free & local only. Serper.dev and Google CSE work on Streamlit Cloud with zero rate-limits."
+        help="Each user pastes their own free API key privately in their session."
     )
 
     search_provider = "browser"
@@ -329,16 +337,19 @@ with st.sidebar:
             "Serper.dev API Key",
             value=saved_serper,
             type="password",
-            placeholder="Paste key from serper.dev",
+            placeholder="Paste your key from serper.dev",
         )
-        if st.button("💾 Save Serper Key", use_container_width=True):
-            if api_key.strip():
-                if not os.path.exists(ENV_PATH):
-                    open(ENV_PATH, "a").close()
-                set_key(ENV_PATH, "SERPER_API_KEY", api_key.strip())
-                st.success("Saved to .env!")
-            else:
-                st.warning("Enter a key first.")
+        if not IS_CLOUD:
+            if st.button("💾 Save Serper Key", use_container_width=True):
+                if api_key.strip():
+                    if not os.path.exists(ENV_PATH):
+                        open(ENV_PATH, "a").close()
+                    set_key(ENV_PATH, "SERPER_API_KEY", api_key.strip())
+                    st.success("Saved locally to .env!")
+                else:
+                    st.warning("Enter a key first.")
+        else:
+            st.caption("🔒 Private BYOK session: your key stays in your browser session only and is never stored on the server.")
         st.caption("Get 2,500 free searches at [serper.dev](https://serper.dev) (no credit card).")
 
     elif "Google Custom" in engine_choice:
@@ -354,15 +365,18 @@ with st.sidebar:
             value=saved_google_cx,
             placeholder="e.g. a1b2c3d4e5f6g7h8i",
         )
-        if st.button("💾 Save Google CSE Keys", use_container_width=True):
-            if api_key.strip() and cse_cx.strip():
-                if not os.path.exists(ENV_PATH):
-                    open(ENV_PATH, "a").close()
-                set_key(ENV_PATH, "GOOGLE_CSE_API_KEY", api_key.strip())
-                set_key(ENV_PATH, "GOOGLE_CSE_CX", cse_cx.strip())
-                st.success("Saved to .env!")
-            else:
-                st.warning("Enter both API Key and CX ID.")
+        if not IS_CLOUD:
+            if st.button("💾 Save Google CSE Keys", use_container_width=True):
+                if api_key.strip() and cse_cx.strip():
+                    if not os.path.exists(ENV_PATH):
+                        open(ENV_PATH, "a").close()
+                    set_key(ENV_PATH, "GOOGLE_CSE_API_KEY", api_key.strip())
+                    set_key(ENV_PATH, "GOOGLE_CSE_CX", cse_cx.strip())
+                    st.success("Saved locally to .env!")
+                else:
+                    st.warning("Enter both API Key and CX ID.")
+        else:
+            st.caption("🔒 Private BYOK session: your keys stay in your browser session only and are never stored on the server.")
         st.caption("100 free searches/day, refreshes daily forever.")
 
     st.divider()
@@ -511,10 +525,7 @@ if start_btn:
                 )
                 st.session_state.candidates = candidates
                 st.session_state.company_status = comp_status
-
-                out_file = "Recruiter_Vietnam_Sourcing_Recap.xlsx"
-                export_mapping_recap_to_excel(candidates, comp_status, out_file)
-                st.session_state.excel_file = out_file
+                st.session_state.excel_bytes = export_mapping_recap_to_bytes(candidates, comp_status)
 
                 progress_bar.progress(100)
                 status_box.success(f"✅ Done! Sourced {len(candidates)} verified profiles across {len(companies)} companies.")
@@ -592,13 +603,12 @@ if st.session_state.candidates or st.session_state.company_status:
             )
 
     st.markdown("<div style='height: 0.5rem'></div>", unsafe_allow_html=True)
-    if st.session_state.excel_file and os.path.exists(st.session_state.excel_file):
-        with open(st.session_state.excel_file, "rb") as f:
-            st.download_button(
-                label="📥 Download Formatted Excel Recap (.xlsx) — 2 Sheets",
-                data=f.read(),
-                file_name="Recruiter_Vietnam_Sourcing_Recap.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                type="primary",
-                use_container_width=True
-            )
+    if st.session_state.excel_bytes:
+        st.download_button(
+            label="📥 Download Formatted Excel Recap (.xlsx) — 2 Sheets",
+            data=st.session_state.excel_bytes,
+            file_name="Recruiter_Vietnam_Sourcing_Recap.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            type="primary",
+            use_container_width=True
+        )
