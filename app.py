@@ -571,16 +571,16 @@ if st.session_state.candidates or st.session_state.company_status:
 
     with tab_cand:
         if st.session_state.candidates:
-            df = pd.DataFrame(st.session_state.candidates)
-            df.columns = ["Name", "Title", "Industry / Background", "Company", "LinkedIn Link"]
+            df = pd.DataFrame(st.session_state.candidates)[["name", "title", "company", "linkedin_link"]]
+            df.columns = ["Name", "Title", "Company", "LinkedIn Link"]
             st.dataframe(
                 df,
                 use_container_width=True,
                 hide_index=True,
                 column_config={
                     "LinkedIn Link": st.column_config.LinkColumn(
-                        "LinkedIn Profile",
-                        display_text="Open Profile ↗"
+                        "LinkedIn Link",
+                        display_text="LINK"
                     )
                 }
             )

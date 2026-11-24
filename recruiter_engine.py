@@ -624,7 +624,7 @@ def _build_recap_workbook(
     # SHEET 1: Sourced Candidates
     ws1 = wb.active
     ws1.title = "Sourced Candidates"
-    headers1 = ["Name", "Title", "Industry / Background", "Company", "LinkedIn Link"]
+    headers1 = ["Name", "Title", "Company", "LinkedIn Link"]
     ws1.append(headers1)
     for col_idx in range(1, len(headers1) + 1):
         cell = ws1.cell(row=1, column=col_idx)
@@ -638,31 +638,31 @@ def _build_recap_workbook(
     for cand in candidates:
         ws1.cell(row=row_num, column=1, value=cand.get("name", "")).font = data_font
         ws1.cell(row=row_num, column=2, value=cand.get("title", "")).font = data_font
-        ws1.cell(row=row_num, column=3, value=cand.get("industry", "")).font = data_font
-        ws1.cell(row=row_num, column=4, value=cand.get("company", "")).font = data_font
+        ws1.cell(row=row_num, column=3, value=cand.get("company", "")).font = data_font
         
         link_val = cand.get("linkedin_link", "")
-        link_cell = ws1.cell(row=row_num, column=5, value=link_val)
         if link_val and link_val.startswith("http"):
+            link_cell = ws1.cell(row=row_num, column=4, value="LINK")
             link_cell.hyperlink = link_val
             link_cell.font = link_font
         else:
+            link_cell = ws1.cell(row=row_num, column=4, value="")
             link_cell.font = data_font
             
-        for c_idx in range(1, 6):
+        for c_idx in range(1, 5):
             c = ws1.cell(row=row_num, column=c_idx)
             c.border = thin_border
-            c.alignment = Alignment(vertical="center")
+            c.alignment = Alignment(horizontal="center", vertical="center") if c_idx == 4 else Alignment(vertical="center")
         ws1.row_dimensions[row_num].height = 20
         row_num += 1
         
-    widths1 = {1: 22, 2: 38, 3: 24, 4: 22, 5: 45}
+    widths1 = {1: 24, 2: 44, 3: 24, 4: 16}
     for col_idx, width in widths1.items():
         ws1.column_dimensions[get_column_letter(col_idx)].width = width
         
     # SHEET 2: Search Coverage Recap
     ws2 = wb.create_sheet(title="Search Coverage Recap")
-    headers2 = ["Company", "Status", "Candidates Sourced", "X-Ray Search Query"]
+    headers2 = ["Company", "Status", "Candidates Sourced"]
     ws2.append(headers2)
     for col_idx in range(1, len(headers2) + 1):
         cell = ws2.cell(row=1, column=col_idx)
@@ -677,7 +677,6 @@ def _build_recap_workbook(
         comp_name = stat.get("company", "")
         status_val = stat.get("status", "Not Found")
         count_val = stat.get("count", 0)
-        query_val = stat.get("query", "")
         
         ws2.cell(row=r2, column=1, value=comp_name).font = data_font
         status_cell = ws2.cell(row=r2, column=2, value=status_val)
@@ -689,14 +688,13 @@ def _build_recap_workbook(
             status_cell.fill = not_found_fill
             
         ws2.cell(row=r2, column=3, value=count_val).alignment = Alignment(horizontal="center", vertical="center")
-        ws2.cell(row=r2, column=4, value=query_val).font = data_font
         
-        for c_idx in range(1, 5):
+        for c_idx in range(1, 4):
             ws2.cell(row=r2, column=c_idx).border = thin_border
         ws2.row_dimensions[r2].height = 20
         r2 += 1
         
-    widths2 = {1: 25, 2: 15, 3: 20, 4: 65}
+    widths2 = {1: 28, 2: 16, 3: 22}
     for col_idx, width in widths2.items():
         ws2.column_dimensions[get_column_letter(col_idx)].width = width
 
